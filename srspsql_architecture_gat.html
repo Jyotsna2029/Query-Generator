@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRSPSQL + GAT Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --y-bg: #FFFBE6; --y-br: #D4940A;
+    --b-bg: #E8F0FF; --b-br: #1A5FCC;
+    --p-bg: #FEE8EE; --p-br: #B02040;
+    --v-bg: #F0E8FF; --v-br: #7030C0;
+    --white: #FFFFFF;
+    --shadow: 0 2px 10px rgba(0,0,0,0.10);
+    --font: 'IBM Plex Sans', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #ECEEF2;
+    font-family: var(--font);
+    padding: 36px 20px 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── Title ── */
+  .title { font-size: 16px; font-weight: 700; color: #1a1a2e; text-align: center; margin-bottom: 4px; }
+  .sub   { font-size: 11.5px; color: #666; text-align: center; margin-bottom: 28px; font-style: italic; }
+
+  /* ── Main layout: 3 stage columns ── */
+  .pipeline {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+    max-width: 1160px;
+  }
+
+  /* Inter-stage arrow */
+  .stage-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+  .stage-arrow svg { width: 28px; }
+
+  /* ── Stage panels ── */
+  .stage {
+    flex: 1;
+    border-radius: 16px;
+    padding: 16px 12px 50px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+  }
+  .s1 { background: var(--y-bg); border: 2px solid var(--y-br); }
+  .s2 { background: var(--b-bg); border: 2px solid var(--b-br); flex: 1.5; }
+  .s3 { background: var(--p-bg); border: 2px solid var(--p-br); flex: 1.5; }
+
+  .stage-footer {
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100%);
+    margin-top: 8px;
+    white-space: nowrap;
+    background: #1a1a2e;
+    color: #fff;
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .badge {
+    background: #fff;
+    color: #1a1a2e;
+    border-radius: 50%;
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  /* ── Generic node ── */
+  .node {
+    background: var(--white);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #222;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .node.llm {
+    background: linear-gradient(135deg, #1a5fcc 0%, #0d3a8a 100%);
+    color: #fff; font-weight: 700; font-size: 12px; letter-spacing: 0.04em;
+  }
+  .node.out-pre {
+    background: linear-gradient(135deg,#1a5fcc,#0d3a8a);
+    color:#fff; font-weight:700; font-size:12px; border-radius:50px; padding: 7px 14px;
+  }
+  .node.out-fin {
+    background: linear-gradient(135deg, #12a060, #0a6e40);
+    color: #fff; font-weight: 800; font-size: 13px; border-radius: 50px; padding: 8px 16px;
+    letter-spacing: 0.04em;
+  }
+  .node.y  { background: #FFFBE6; border: 1.5px solid var(--y-br); }
+  .node.b  { background: #E8F0FF; border: 1.5px solid var(--b-br); }
+  .node.pk { background: #FEE8EE; border: 1.5px solid var(--p-br); }
+  .node.v  { background: var(--v-bg); border: 1.5px solid var(--v-br); }
+  .node.code {
+    background: #1a1e2e; color: #a8d8a8;
+    font-family: var(--mono); font-size: 9.5px;
+    text-align: left; padding: 7px 10px;
+  }
+
+  /* ── GAT box ── */
+  .gat-wrap {
+    background: var(--v-bg);
+    border: 2px solid var(--v-br);
+    border-radius: 12px;
+    padding: 10px 10px 8px;
+  }
+  .gat-title {
+    font-size: 12px; font-weight: 700; color: #5010A0;
+    text-align: center; margin-bottom: 6px;
+  }
+  .gat-sub { font-size: 9.5px; color: #333; line-height: 1.7; }
+  .gat-sub b { color: #5010A0; }
+  .gat-sub .tag {
+    display: inline-block; background: #5010A0; color: #fff;
+    border-radius: 4px; padding: 1px 5px; font-size: 9px; font-weight: 600; margin-right: 3px;
+  }
+
+  /* ── Dashed parser sub-box ── */
+  .parser-box {
+    border: 2px dashed var(--p-br);
+    border-radius: 10px;
+    padding: 10px 8px 8px;
+    position: relative;
+  }
+  .parser-label {
+    position: absolute; top: -11px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--p-bg); padding: 0 7px;
+    font-size: 9.5px; font-weight: 700; color: var(--p-br); white-space: nowrap;
+  }
+
+  /* ── Layout helpers ── */
+  .row   { display: flex; gap: 7px; align-items: center; }
+  .col   { display: flex; flex-direction: column; gap: 7px; flex: 1; }
+  .down  { text-align: center; font-size: 16px; color: #555; line-height: 1; }
+  .right { font-size: 16px; color: #555; flex-shrink: 0; }
+
+  /* SQL syntax */
+  .kw  { color: #ff8888; font-weight: 600; }
+  .tbl { color: #88eeff; }
+  .col-name { color: #ffdd88; }
+
+  /* ── Caption ── */
+  .caption {
+    margin-top: 56px; font-size: 12px; color: #444;
+    text-align: center; line-height: 1.7; font-style: italic; max-width: 900px;
+  }
+  .caption b { font-style: normal; font-weight: 600; }
+
+  /* ── Legend ── */
+  .legend {
+    margin-top: 18px; display: flex; gap: 18px; flex-wrap: wrap;
+    justify-content: center; font-size: 11px; color: #555;
+  }
+  .leg { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 13px; height: 13px; border-radius: 4px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<p class="title">SRSPSQL with Integrated Graph Attention Network (GAT)</p>
+<p class="sub">Revised Architecture — Lei et al., <i>Inf. Softw. Technol.</i> 194 (2026) 108064 &nbsp;|&nbsp; Fig. 1 (Rev.)</p>
+
+<div class="pipeline">
+
+  <!-- ══════════════════════════════════
+       STAGE 1 — SEMANTIC RECONSTRUCTION
+  ══════════════════════════════════ -->
+  <div class="stage s1">
+
+    <div class="row">
+      <div class="col">
+        <div class="node y" style="font-size:10.5px;">🗄️ Database<br>Content</div>
+        <div class="node y" style="font-size:10.5px;">❓ Questions</div>
+      </div>
+      <div class="right">→</div>
+      <div class="col">
+        <div class="node y" style="font-size:10px;">📝 Question<br>Rewriting Prompt</div>
+      </div>
+    </div>
+
+    <div class="down">↓</div>
+    <div class="node llm">LLM</div>
+    <div class="down">↓</div>
+    <div class="node y" style="font-size:10.5px; font-weight:600;">✏️ Rewritten Questions <i>Q</i><sub>rew</sub></div>
+
+    <div style="font-size:9.5px;color:#888;text-align:center;padding:2px 0;line-height:1.6;">
+      BERT table selection (top-3)<br>GloVe row filtering (top-5)
+    </div>
+
+    <div class="node code">
+      <span class="kw">/* Semantic Reconstruction */</span><br>
+      Input: Q<sub>orig</sub> + R<sub>topk</sub><br>
+      Output: Q<sub>rew</sub>
+    </div>
+
+    <div class="stage-footer"><span class="badge">①</span> Semantic Reconstruction</div>
+  </div>
+
+  <!-- inter-stage arrow -->
+  <div class="stage-arrow">
+    <svg viewBox="0 0 28 20" fill="none"><path d="M2 10 H22 M16 4 L24 10 L16 16" stroke="#555" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- ══════════════════════════════════
+       STAGE 2 — INITIAL SQL GENERATION
+  ══════════════════════════════════ -->
+  <div class="stage s2">
+
+    <!-- Top: example selection + schema graph feed into GAT -->
+    <div class="row">
+      <div class="col">
+        <div class="node b" style="font-size:10px;">🔍 Masked Question<br>Similarity (BERT)</div>
+        <div class="down">↓</div>
+        <div class="node b" style="font-size:10px;">📚 Selected<br>Examples</div>
+      </div>
+      <div class="col">
+        <div class="node b" style="font-size:10px;">🔗 Schema<br>Information Prompt</div>
+        <div class="down">↓</div>
+        <div class="node b" style="font-size:10px;">🕸️ Schema Graph<br><span style="font-size:9px;color:#555;">(Tables as nodes,<br>FK as edges)</span></div>
+      </div>
+    </div>
+
+    <div class="down">↓</div>
+
+    <!-- GAT box — the new component -->
+    <div class="gat-wrap">
+      <div class="gat-title">⬡ Graph Attention Network (GAT)</div>
+      <div class="gat-sub">
+        <span class="tag">Node</span> Table / Column Features<br>
+        <span class="tag">Edge</span> FK Relationships<br>
+        <span class="tag">Attn</span> Multi-head Attention Mechanism<br>
+        <span class="tag">Out</span> Schema-aware Node Embeddings
+      </div>
+    </div>
+
+    <div class="down">↓</div>
+    <div class="node v" style="font-size:10px;">✂️ GAT-informed<br>Schema Pruning</div>
+
+    <div class="down">↓</div>
+
+    <!-- Merge into full-schema prompt -->
+    <div class="node b" style="font-size:10px;">📋 Full-Schema<br>Information Prompt<br><span style="font-size:9px;color:#555;">(Examples + GAT-pruned Schema + DB content)</span></div>
+
+    <div class="down">↓</div>
+    <div class="node llm">LLM</div>
+    <div class="down">↓</div>
+    <div class="node out-pre">Pre_SQL</div>
+
+    <div class="stage-footer"><span class="badge">②</span> Initial SQL Generation</div>
+  </div>
+
+  <!-- inter-stage arrow -->
+  <div class="stage-arrow">
+    <svg viewBox="0 0 28 20" fill="none"><path d="M2 10 H22 M16 4 L24 10 L16 16" stroke="#555" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- ══════════════════════════════════
+       STAGE 3 — FINAL SQL GENERATION
+  ══════════════════════════════════ -->
+  <div class="stage s3">
+
+    <!-- Parser sub-box -->
+    <div class="parser-box">
+      <div class="parser-label">SQL Parser — Full Logic of Fig. 2</div>
+
+      <div class="row" style="gap:8px;">
+        <div class="col">
+          <div class="node code" style="font-size:9px;">
+            <div style="color:#aaa;margin-bottom:2px;">SQL Skeleton</div>
+            <span class="kw">select</span> _ <span class="kw">from</span> _;
+          </div>
+          <div style="font-size:9.5px;text-align:center;color:#888;margin-top:2px;">SQL Skeleton<br>Extractor</div>
+        </div>
+        <div class="col">
+          <div class="node code" style="font-size:9px;">
+            <div style="color:#aaa;margin-bottom:2px;">Extracted Schema</div>
+            <span class="tbl">continents</span>:<span class="col-name">contid</span>
+          </div>
+          <div style="font-size:9.5px;text-align:center;color:#888;margin-top:2px;">Database Schema<br>Extractor</div>
+        </div>
+      </div>
+
+      <div class="down" style="margin:4px 0;">↑</div>
+      <div class="node pk" style="font-size:10px;">Normalization &amp; Standardization</div>
+      <div class="down" style="margin:4px 0;">↑</div>
+
+      <div class="row" style="gap:6px;font-size:9px;">
+        <div class="node code" style="flex:1;">
+          <span class="kw">SELECT</span> <span class="col-name">ContId</span> <span class="kw">FROM</span> <span class="tbl">continents</span>;
+        </div>
+        <div class="node code" style="flex:1;">
+          <span class="kw">CREATE TABLE</span> <span class="tbl">continents</span> (<span class="col-name">ContId</span> INTEGER…)
+        </div>
+      </div>
+      <div class="row" style="font-size:9px;color:#999;justify-content:space-around;margin-top:3px;">
+        <span>Pre_SQL</span><span>Database_Schema</span>
+      </div>
+    </div>
+
+    <div class="down">↓</div>
+
+    <!-- Filter + Prune -->
+    <div class="row" style="gap:7px;">
+      <div class="col" style="align-items:center;">
+        <div class="node pk" style="font-size:10px;">🔬 Structure-Aware<br>Example Filtering<br><span style="font-size:9px;color:#777;">AST tree-edit distance</span></div>
+        <div class="down">↓</div>
+        <div class="node pk" style="font-size:10px;">📚 Filtered<br>Examples</div>
+      </div>
+      <div class="col" style="align-items:center;">
+        <div class="node pk" style="font-size:10px;">✂️ Dynamic<br>Schema Pruning<br><span style="font-size:9px;color:#777;">table-level (↓44% tokens)</span></div>
+        <div class="down">↓</div>
+        <div class="node pk" style="font-size:10px;">🗃️ Concise<br>Database Schema</div>
+      </div>
+    </div>
+
+    <div class="down">↓</div>
+    <div class="node pk" style="font-size:10px;">📋 Concise-Schema Information Prompt</div>
+    <div class="down">↓</div>
+    <div class="node llm">LLM</div>
+    <div class="down">↓</div>
+    <div class="node out-fin">Fin_SQL ✓</div>
+
+    <div class="stage-footer"><span class="badge">③</span> Final SQL Generation</div>
+  </div>
+
+</div>
+
+<p class="caption">
+  <b>Fig. 1 (Rev.).</b> The execution process of SRSPSQL with integrated GAT.<br>
+  Stage ① rewrites ambiguous questions using LLM + database content (BERT table selection; GloVe row filtering, top-<i>k</i>=5).<br>
+  Stage ② builds a Schema Graph, applies a <b>Graph Attention Network (GAT)</b> over table/column nodes with FK edges to produce
+  schema-aware embeddings, then uses GAT-informed pruning to construct the full-schema prompt for initial SQL (Pre_SQL).<br>
+  Stage ③ parses Pre_SQL via normalization → skeleton + schema extraction, filters examples by AST similarity,
+  applies dynamic schema pruning (↓44% token overhead), and generates the final Fin_SQL.
+</p>
+
+<div class="legend">
+  <div class="leg"><div class="dot" style="background:linear-gradient(135deg,#1a5fcc,#0d3a8a)"></div> LLM call</div>
+  <div class="leg"><div class="dot" style="background:var(--y-bg);border:1.5px solid var(--y-br)"></div> Stage ① (Semantic Recon.)</div>
+  <div class="leg"><div class="dot" style="background:var(--b-bg);border:1.5px solid var(--b-br)"></div> Stage ② (Initial SQL)</div>
+  <div class="leg"><div class="dot" style="background:var(--v-bg);border:1.5px solid var(--v-br)"></div> GAT Component (new)</div>
+  <div class="leg"><div class="dot" style="background:var(--p-bg);border:1.5px solid var(--p-br)"></div> Stage ③ (Final SQL)</div>
+  <div class="leg"><div class="dot" style="background:linear-gradient(135deg,#12a060,#0a6e40)"></div> Final output</div>
+</div>
+
+</body>
+</html>
